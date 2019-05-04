@@ -20,7 +20,7 @@ public class VoxelizationSystem : JobComponentSystem
     
     /*Parameters*/
     const float voxelSize = 0.08f;
-    const float duration = 6.0f;
+    const float duration = 5.0f;
     public static readonly string modelName = "Human";
 
     /*Runtime */
@@ -218,22 +218,19 @@ public class VoxelizationSystem : JobComponentSystem
 
     struct MoveVoxel : IJobForEachWithEntity<LocalToWorld>{
         [ReadOnly]
-        public NativeArray<int> positionIndex; 
-        public int baseIndex;
+        public NativeArray<int> targetPositions; 
+        public int positionBaseIndex;
         public void Execute(Entity entity, int index, ref LocalToWorld localToWorld){
-            if (index < baseIndex){
-                return;
-            }
-
             localToWorld = new LocalToWorld
             {
                 Value = float4x4.TRS(
-                    VoxelUtility.Index1ToPos(positionIndex[index]),
+                    VoxelUtility.Index1ToPos(targetPositions[positionBaseIndex + index]),
                     quaternion.identity,
                     new float3(voxelSize, voxelSize, voxelSize))
             };
         }
     }
+
 
     struct HashSurfaceVoxelUnCommonFace : IJobParallelFor{
         [ReadOnly]
@@ -439,32 +436,48 @@ public class VoxelizationSystem : JobComponentSystem
     protected override JobHandle OnUpdate(JobHandle inputDeps){
         var voxelArray = volumePosArray;
 
-        int incAmount = math.min((int)math.ceil(voxelArray.Length / duration * Time.deltaTime), voxelArray.Length - completedVoxel);
-
-        if (incAmount == 0){
+        int incAmountLimit = math.min((int)math.ceil(voxelArray.Length / duration * Time.deltaTime), voxelArray.Length - completedVoxel);
+        
+        if (incAmountLimit == 0){
             Debug.Log("Finished");
             return inputDeps;
         }
-        var entities = new NativeArray<Entity>(incAmount, Allocator.TempJob);
-        EntityManager.Instantiate(voxelPrefab, entities);
-        
-        var moveJob = new MoveVoxel{
-            positionIndex = voxelArray,
-            baseIndex = completedVoxel
-        };
-        
-        EntityQuery voxelGroup = GetEntityQuery(new EntityQueryDesc
-        {
-            All = new [] { ComponentType.ReadWrite<LocalToWorld>() },
-            Options = EntityQueryOptions.Default
-        });
 
-        var moveHandle = moveJob.Schedule(voxelGroup, inputDeps);
-        moveHandle.Complete();
+        JobHandle moveHandle = inputDeps;
 
-        completedVoxel += incAmount;
-        entities.Dispose();
+        const int checkTimerStep = 5000;
+        const float minFrameRate = 90;
+        int startFrameTime = System.Environment.TickCount;
+        int completedVoxelAtStart = completedVoxel;
+
+        for (int step = 0; step <= incAmountLimit / checkTimerStep; ++step){
+            int stepInc = (step == incAmountLimit / checkTimerStep) ? incAmountLimit % checkTimerStep : checkTimerStep;
+            if (stepInc == 0 || System.Environment.TickCount - startFrameTime > 1000 / minFrameRate){
+                //Debug.Log("actually completed " + (completedVoxel - completedVoxelAtStart));
+                break;
+            }
+
+            var entities = new NativeArray<Entity>(stepInc, Allocator.TempJob);
+            EntityManager.Instantiate(voxelPrefab, entities);
+            var moveJob = new MoveVoxel{
+                positionBaseIndex = completedVoxel,
+                targetPositions = voxelArray
+            };
+            EntityQuery voxelGroup = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new [] { ComponentType.ReadWrite<LocalToWorld>(), ComponentType.ReadWrite<NewVoxel>() },
+                Options = EntityQueryOptions.Default
+            });
+            moveHandle = moveJob.Schedule(voxelGroup, inputDeps);
+            moveHandle.Complete();
+
+            EntityManager.RemoveComponent(entities,ComponentType.ReadWrite<NewVoxel>());
+            completedVoxel += stepInc;
+            entities.Dispose();
+        }
+        
         return moveHandle;
+
     }
 
     protected override void OnDestroyManager(){
