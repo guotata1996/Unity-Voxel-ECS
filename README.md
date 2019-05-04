@@ -12,9 +12,9 @@ Model Size (Bounding box): 11.7 * 20.7 * 3.8
 
 [![Voxel](https://img.youtube.com/vi/K9-tTZI_YGQ/0.jpg)](https://www.youtube.com/watch?v=K9-tTZI_YGQ)
 
-### Volumetric voxelization
-- Resolution: 0.08
-- Voxels Count: 205k
-- Time: < 2sec (with Core i7-8850H)
+### Volumetric voxelization with random initial position
+- Resolution: 0.1
+- Voxels Count: 102k
+- Time: ~ 1sec (with Core i7-8850H)
 
-[![Voxel](https://img.youtube.com/vi/8IAtZHuonk4/0.jpg)](https://www.youtube.com/watch?v=8IAtZHuonk4)
+[![Voxel](https://img.youtube.com/vi/Cqne5AauGgk/0.jpg)](https://www.youtube.com/watch?v=Cqne5AauGgk)
