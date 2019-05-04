@@ -19,12 +19,13 @@ public class VoxelizationSystem : JobComponentSystem
     protected NativeHashMap<int,bool> hashMap;
     
     /*Parameters*/
-    const float voxelSize = 0.08f;
-    const float duration = 5.0f;
+    const float voxelSize = 0.1f;
+    const float minDuration = 5.0f;
+    const int maxMovingNumber = 25000;
     public static readonly string modelName = "Human";
 
     /*Runtime */
-    int completedVoxel = 0;
+    Unity.Mathematics.Random randomGenerater;
 
     struct HashTriangleToVoxel : IJobParallelFor
     {
@@ -216,18 +217,53 @@ public class VoxelizationSystem : JobComponentSystem
         }
     }
 
-    struct MoveVoxel : IJobForEachWithEntity<LocalToWorld>{
+    struct RandomSpawnVoxelOnSphere : IJobForEachWithEntity<LocalToWorld, Voxel>{
+        public float radius;
+        public float3 center;
+        public NativeArray<float3> rdnPointsOnUnitShpere;
+        public NativeArray<quaternion> rdnQuaternions;
         [ReadOnly]
         public NativeArray<int> targetPositions; 
         public int positionBaseIndex;
-        public void Execute(Entity entity, int index, ref LocalToWorld localToWorld){
+
+        public void Execute(Entity entity, int index, ref LocalToWorld localToWorld, ref Voxel voxel){
+            Vector3 rdnCenter = rdnPointsOnUnitShpere[index];
+            float3 rdnCenterf = center + (float3)rdnCenter * radius;
+            voxel.targetPosition = VoxelUtility.Index1ToPos(targetPositions[positionBaseIndex + index]);
+
             localToWorld = new LocalToWorld
             {
                 Value = float4x4.TRS(
-                    VoxelUtility.Index1ToPos(targetPositions[positionBaseIndex + index]),
-                    quaternion.identity,
+                    rdnCenterf,
+                    rdnQuaternions[index],
                     new float3(voxelSize, voxelSize, voxelSize))
             };
+        }
+
+    }
+    struct MoveVoxel : IJobForEachWithEntity<LocalToWorld, Voxel>{
+        public NativeHashMap<Entity, bool>.Concurrent finishedOutput;
+        public float deltaTime;
+        public float tolerance;
+        public Unity.Mathematics.Random lerpSpeed;
+        public void Execute(Entity entity, int index, ref LocalToWorld localToWorld, [ReadOnly]ref Voxel voxel){
+            float3 p = localToWorld.Position;
+            float3 targetP = voxel.targetPosition;
+            Quaternion r = Quaternion.LookRotation(localToWorld.Forward, localToWorld.Up);
+            Quaternion targetR = Quaternion.identity;
+            float speed = lerpSpeed.NextFloat(1f, 10f);
+
+            localToWorld = new LocalToWorld
+            {
+                Value = float4x4.TRS(
+                    math.lerp(p, targetP, deltaTime * speed),
+                    Quaternion.Lerp(r, targetR, deltaTime * speed),
+                    new float3(voxelSize, voxelSize, voxelSize))
+            };
+            
+            if (math.distance(p, targetP) < tolerance){
+                finishedOutput.TryAdd(entity, true);
+            }
         }
     }
 
@@ -360,6 +396,11 @@ public class VoxelizationSystem : JobComponentSystem
     }
 
     protected override void OnCreateManager(){
+        //Comment this in Build version
+        UnityEditor.SceneView.FocusWindowIfItsOpen(typeof(UnityEditor.SceneView));
+
+        randomGenerater = new Unity.Mathematics.Random(1);
+
         modelPrefab = Resources.Load<GameObject>(modelName);
         modelMesh = ((MeshFilter)modelPrefab.GetComponentInChildren(typeof(MeshFilter))).sharedMesh;
         
@@ -436,45 +477,88 @@ public class VoxelizationSystem : JobComponentSystem
     protected override JobHandle OnUpdate(JobHandle inputDeps){
         var voxelArray = volumePosArray;
 
-        int incAmountLimit = math.min((int)math.ceil(voxelArray.Length / duration * Time.deltaTime), voxelArray.Length - completedVoxel);
         
-        if (incAmountLimit == 0){
+        EntityQuery newGroup = GetEntityQuery(new EntityQueryDesc
+        {
+            All = new [] { ComponentType.ReadWrite<Voxel>(), ComponentType.ReadWrite<LocalToWorld>(), ComponentType.ReadWrite<NewVoxel>() },
+            Options = EntityQueryOptions.Default
+        });
+
+        EntityQuery movingGroup = GetEntityQuery(new EntityQueryDesc
+        {
+            All = new [] { ComponentType.ReadWrite<Voxel>(), ComponentType.ReadWrite<LocalToWorld>(), ComponentType.ReadWrite<MovingVoxel>() },
+            Options = EntityQueryOptions.Default
+        });
+
+        EntityQuery finishedGroup = GetEntityQuery(new EntityQueryDesc
+        {
+            All = new [] {ComponentType.ReadWrite<Voxel>(), ComponentType.ReadWrite<LocalToWorld>()},
+            None = new ComponentType[] {ComponentType.ReadWrite<MovingVoxel>(), ComponentType.ReadWrite<NewVoxel>()},
+            Options = EntityQueryOptions.Default
+        });
+
+        int existingCount = newGroup.CalculateLength() + movingGroup.CalculateLength() + finishedGroup.CalculateLength();
+        int incAmount = math.min((int)math.ceil(voxelArray.Length / minDuration * Time.deltaTime), voxelArray.Length - existingCount);
+
+        Debug.Log(finishedGroup.CalculateLength() + " finished");
+
+        if (finishedGroup.CalculateLength() == voxelArray.Length){
             Debug.Log("Finished");
             return inputDeps;
         }
 
-        JobHandle moveHandle = inputDeps;
-
-        const int checkTimerStep = 5000;
-        const float minFrameRate = 90;
-        int startFrameTime = System.Environment.TickCount;
-        int completedVoxelAtStart = completedVoxel;
-
-        for (int step = 0; step <= incAmountLimit / checkTimerStep; ++step){
-            int stepInc = (step == incAmountLimit / checkTimerStep) ? incAmountLimit % checkTimerStep : checkTimerStep;
-            if (stepInc == 0 || System.Environment.TickCount - startFrameTime > 1000 / minFrameRate){
-                //Debug.Log("actually completed " + (completedVoxel - completedVoxelAtStart));
-                break;
-            }
-
-            var entities = new NativeArray<Entity>(stepInc, Allocator.TempJob);
-            EntityManager.Instantiate(voxelPrefab, entities);
-            var moveJob = new MoveVoxel{
-                positionBaseIndex = completedVoxel,
-                targetPositions = voxelArray
-            };
-            EntityQuery voxelGroup = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new [] { ComponentType.ReadWrite<LocalToWorld>(), ComponentType.ReadWrite<NewVoxel>() },
-                Options = EntityQueryOptions.Default
-            });
-            moveHandle = moveJob.Schedule(voxelGroup, inputDeps);
-            moveHandle.Complete();
-
-            EntityManager.RemoveComponent(entities,ComponentType.ReadWrite<NewVoxel>());
-            completedVoxel += stepInc;
-            entities.Dispose();
+        //When there's too much moving job, stop adding new objects
+        if (movingGroup.CalculateLength() >= maxMovingNumber){
+            incAmount = 0;
         }
+
+        // Move
+        NativeHashMap<Entity, bool> reachedTargetVoxel = new NativeHashMap<Entity, bool>(movingGroup.CalculateLength(), Allocator.TempJob);
+        var moveJob = new MoveVoxel{
+            finishedOutput = reachedTargetVoxel.ToConcurrent(),
+            deltaTime = Time.deltaTime,
+            lerpSpeed = randomGenerater,
+            tolerance = voxelSize * 0.1f,
+        };
+        JobHandle moveHandle = moveJob.Schedule(movingGroup, inputDeps);
+        moveHandle.Complete();
+
+        // Spawn
+        var entities = new NativeArray<Entity>(incAmount, Allocator.TempJob);
+        EntityManager.Instantiate(voxelPrefab, entities);
+
+        var spawnPositions = new NativeArray<float3>(incAmount, Allocator.TempJob);
+        GeneratePoints.RandomPointsInUnitSphere(spawnPositions);
+        var spawnRotations = new NativeArray<quaternion>(incAmount, Allocator.TempJob);
+        for (int i = 0; i != incAmount; ++i){
+            spawnRotations[i] = quaternion.Euler(
+                UnityEngine.Random.Range(0.0f, 360f),
+                UnityEngine.Random.Range(0.0f, 360f),
+                UnityEngine.Random.Range(0.0f, 360f));
+        }
+
+        var spawnJob = new RandomSpawnVoxelOnSphere{
+            radius = VoxelUtility.DiagonalLength,
+            center = VoxelUtility.BBoxCenter,
+            rdnPointsOnUnitShpere = spawnPositions,
+            rdnQuaternions = spawnRotations,
+            positionBaseIndex = finishedGroup.CalculateLength() + movingGroup.CalculateLength(),
+            targetPositions = voxelArray
+        };
+        moveHandle = spawnJob.Schedule(newGroup, moveHandle);
+        moveHandle.Complete();
+
+        EntityManager.RemoveComponent(entities, ComponentType.ReadWrite<NewVoxel>());
+        EntityManager.AddComponent(entities, ComponentType.ReadWrite<MovingVoxel>());
+
+        var justReachedVoxels = reachedTargetVoxel.GetKeyArray(Allocator.TempJob);
+        EntityManager.RemoveComponent(justReachedVoxels, ComponentType.ReadWrite<MovingVoxel>());
+
+        entities.Dispose();
+        reachedTargetVoxel.Dispose();
+        justReachedVoxels.Dispose();
+        spawnPositions.Dispose();
+        spawnRotations.Dispose();
         
         return moveHandle;
 

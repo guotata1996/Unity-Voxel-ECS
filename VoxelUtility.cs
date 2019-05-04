@@ -134,4 +134,16 @@ public class VoxelUtility
         Debug.Log("Xrange " + min_x + "~" + max_x + "\nYRange " + min_y + "~" + max_y + 
         "\nZrange " + min_z + "~" + max_z + "\ntotalGrids " + TotalGrids);
     }
+
+    public static float3 BBoxCenter{
+        get{
+            return new float3((max_x + min_x) / 2, (max_y + min_y) / 2, (max_z + min_z) / 2);
+        }
+    }
+
+    public static float DiagonalLength{
+        get{
+            return math.distance(new float3(min_x, min_y, min_z), new float3(max_x, max_y, max_z));
+        }
+    }
 }
