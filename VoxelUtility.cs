@@ -12,7 +12,11 @@ public class VoxelUtility
 
     static int3 TotalGrids;
 
-    public static void Init(Mesh mesh, float _voxelSize){
+    static int colorLevelCount;
+
+    static Material[] materials;
+
+    public static void Init(Mesh mesh, float _voxelSize, Color a, Color b){
         var vPositions = mesh.vertices;
         foreach(var p in vPositions){
             min_x = math.min(p.x, min_x);
@@ -22,8 +26,22 @@ public class VoxelUtility
             min_z = math.min(p.z, min_z);
             max_z = math.max(p.z, max_z);
         }
+
+        //pad a layer of empty grid to boundary
+        min_x -= _voxelSize;
+        min_y -= _voxelSize;
+        min_z -= _voxelSize;
+        max_x += _voxelSize;
+        max_y += _voxelSize;
+        max_z += _voxelSize;
+
         voxelSize = _voxelSize;
         TotalGrids = CalculateTotalGrids;
+        materials = new Material[TotalGrids.y];
+        for (int i = 0; i != TotalGrids.y; ++i){
+            materials[i] = new Material(Shader.Find("Standard"));
+            materials[i].color = Color.Lerp(a, b, (float)i / (TotalGrids.y - 1));
+        }
     }
 
     public static int3 PosToIndex3(float3 position){
@@ -145,5 +163,11 @@ public class VoxelUtility
         get{
             return math.distance(new float3(min_x, min_y, min_z), new float3(max_x, max_y, max_z));
         }
+    }
+
+    public static Material GetMaterial(float y){
+        float portion = (y - min_y) / (max_y - min_y);
+        int level = Mathf.FloorToInt(portion * (TotalGrids.y - 1));
+        return materials[level];
     }
 }

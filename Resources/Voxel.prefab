@@ -12,8 +12,8 @@ GameObject:
   - component: {fileID: 2660966950967318851}
   - component: {fileID: 1329150130}
   - component: {fileID: 1329150129}
-  - component: {fileID: 8600179051727501714}
   - component: {fileID: 2711896688506751044}
+  - component: {fileID: 1185939742002329070}
   m_Layer: 0
   m_Name: Voxel
   m_TagString: Untagged
@@ -100,18 +100,6 @@ MonoBehaviour:
     layer: 0
     castShadows: 0
     receiveShadows: 0
---- !u!114 &8600179051727501714
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2660966950967318848}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0d1d935f980db4e758087c6cb9bdf3f2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &2711896688506751044
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -129,3 +117,15 @@ MonoBehaviour:
       x: 0
       y: 0
       z: 0
+--- !u!114 &1185939742002329070
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660966950967318848}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d1d935f980db4e758087c6cb9bdf3f2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
