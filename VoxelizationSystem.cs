@@ -24,8 +24,9 @@ public class VoxelizationSystem : JobComponentSystem
     const float minDuration = 5.0f;
     const int maxMovingNumber = 25000;
     public static readonly string modelName = "Human";
-    readonly Color bottomColor = Color.blue;
+    readonly Color bottomColor = Color.red;
     readonly Color topColor = Color.grey;
+    const bool Volumetric = false;
 
     /*Runtime */
     Unity.Mathematics.Random randomGenerater;
@@ -484,7 +485,7 @@ public class VoxelizationSystem : JobComponentSystem
     }
 
     protected override JobHandle OnUpdate(JobHandle inputDeps){
-        var voxelArray = volumePosArray;
+        var voxelArray = Volumetric ? volumePosArray : surfacePosArray;
 
         int existingCount = newGroup.CalculateLength() + movingGroup.CalculateLength() + finishedGroup.CalculateLength();
         int incAmount = math.min((int)math.ceil(voxelArray.Length / minDuration * Time.deltaTime), voxelArray.Length - existingCount);
