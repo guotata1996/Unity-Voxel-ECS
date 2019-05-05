@@ -17,6 +17,7 @@ public class VoxelUtility
     static Material[] materials;
 
     public static void Init(Mesh mesh, float _voxelSize, Color a, Color b){
+        Debug.Log("V: " + mesh.vertexCount + " F: " + mesh.triangles.Length / 3);
         var vPositions = mesh.vertices;
         foreach(var p in vPositions){
             min_x = math.min(p.x, min_x);
@@ -41,6 +42,7 @@ public class VoxelUtility
         for (int i = 0; i != TotalGrids.y; ++i){
             materials[i] = new Material(Shader.Find("Standard"));
             materials[i].color = Color.Lerp(a, b, (float)i / (TotalGrids.y - 1));
+            materials[i].enableInstancing = true;
         }
     }
 

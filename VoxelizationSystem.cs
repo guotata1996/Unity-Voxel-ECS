@@ -26,7 +26,9 @@ public class VoxelizationSystem : JobComponentSystem
     public static readonly string modelName = "Human";
     readonly Color bottomColor = Color.red;
     readonly Color topColor = Color.grey;
-    const bool Volumetric = false;
+    const bool volumetric = false;
+    readonly bool randomOrder = false;
+
 
     /*Runtime */
     Unity.Mathematics.Random randomGenerater;
@@ -249,7 +251,6 @@ public class VoxelizationSystem : JobComponentSystem
         }
     }
 
-
     struct HashSurfaceVoxelUnCommonFace : IJobParallelFor{
         [ReadOnly]
         public NativeHashMap<int, bool> surfaceVoxels;
@@ -389,7 +390,7 @@ public class VoxelizationSystem : JobComponentSystem
 
     protected override void OnCreateManager(){
         //Comment this in Build version
-        UnityEditor.SceneView.FocusWindowIfItsOpen(typeof(UnityEditor.SceneView));
+        // UnityEditor.SceneView.FocusWindowIfItsOpen(typeof(UnityEditor.SceneView));
 
         randomGenerater = new Unity.Mathematics.Random(1);
 
@@ -460,8 +461,10 @@ public class VoxelizationSystem : JobComponentSystem
         surfaceHashMap.Dispose();
         volumeHashMap.Dispose();
 
-        Shuffle(surfacePosArray);
-        Shuffle(volumePosArray);
+        if (randomOrder){
+            Shuffle(surfacePosArray);
+            Shuffle(volumePosArray);
+        }
         voxelPrefab = Resources.Load<GameObject>("Voxel");
 
         newGroup = GetEntityQuery(new EntityQueryDesc
@@ -485,7 +488,7 @@ public class VoxelizationSystem : JobComponentSystem
     }
 
     protected override JobHandle OnUpdate(JobHandle inputDeps){
-        var voxelArray = Volumetric ? volumePosArray : surfacePosArray;
+        var voxelArray = volumetric ? volumePosArray : surfacePosArray;
 
         int existingCount = newGroup.CalculateLength() + movingGroup.CalculateLength() + finishedGroup.CalculateLength();
         int incAmount = math.min((int)math.ceil(voxelArray.Length / minDuration * Time.deltaTime), voxelArray.Length - existingCount);
